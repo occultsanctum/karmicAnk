@@ -1,0 +1,2 @@
+# karmicAnk
+Vedic Numerology API 
