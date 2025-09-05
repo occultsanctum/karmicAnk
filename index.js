@@ -2,7 +2,64 @@ import express from "express";
 import bodyParser from "body-parser";
 
 const app = express();
-app.use(bodyParser.json());
+// CORS middleware to allow external access
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, key, value');
+  
+  // Handle preflight OPTIONS requests
+  if (req.method === 'OPTIONS') {
+    console.log(`${new Date().toISOString()} - OPTIONS request handled`);
+    return res.status(200).end();
+  }
+  
+  next();
+});
+
+// Logging middleware to see all incoming requests
+app.use((req, res, next) => {
+  console.log(`\n======== NEW REQUEST ========`);
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  console.log('Headers:', JSON.stringify(req.headers, null, 2));
+  console.log('Raw body length:', req.headers['content-length'] || 'unknown');
+  next();
+});
+
+// Add error handling for JSON parsing
+app.use(bodyParser.json({
+  type: 'application/json',
+  verify: (req, res, buf, encoding) => {
+    req.rawBody = buf;
+  }
+}));
+
+// Middleware to log request bodies after parsing
+app.use((req, res, next) => {
+  if (req.body && Object.keys(req.body).length > 0) {
+    console.log('📥 PARSED REQUEST BODY:', JSON.stringify(req.body, null, 2));
+  }
+  
+  // Capture original json method to log responses
+  const originalJson = res.json;
+  res.json = function(body) {
+    console.log('📤 RESPONSE BODY:', JSON.stringify(body, null, 2));
+    console.log('======== END REQUEST ========\n');
+    return originalJson.call(this, body);
+  };
+  
+  next();
+});
+
+// Error handler for JSON parsing errors
+app.use((error, req, res, next) => {
+  if (error instanceof SyntaxError && error.status === 400 && 'body' in error) {
+    console.log('JSON Parse Error:', error.message);
+    console.log('Raw body received:', req.rawBody ? req.rawBody.toString() : 'No body');
+    return res.status(400).json({ error: 'Invalid JSON format' });
+  }
+  next(error);
+});
 
 // Planetary mapping
 const planetMap = {
@@ -79,6 +136,6 @@ app.post("/functions/calc_numerology", (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Numerology webhook running on port ${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Numerology webhook running on 0.0.0.0: ${PORT}`);
 });
